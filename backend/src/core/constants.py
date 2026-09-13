@@ -1,9 +1,12 @@
 EXPECTED_FIELDS = [
     "owner_name",
+    "guardian",
     "survey_number",
     "khasra_number",
     "khata_number",
     "area",
+    "ocupier_share",
+    "share_area",
     "village",
     "tehsil",
     "district",
