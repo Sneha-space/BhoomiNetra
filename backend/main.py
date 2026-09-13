@@ -31,17 +31,24 @@ Run from backend/:  uvicorn main:app --reload
 """
 
 from fastapi import FastAPI
-
+from fastapi.middleware.cors import CORSMiddleware
 from src.api.routes import documents, dashboard, records
 
 from src.db.base import Base
 from src.db.session import engine
 import src.models  # noqa: F401, registers models with Base
-
+from src.core.config import CORS_ORIGINS
 Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(title="BhoomiNetra API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(documents.router)
 app.include_router(dashboard.router)
 app.include_router(records.router)
