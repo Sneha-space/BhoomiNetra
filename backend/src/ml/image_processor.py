@@ -97,9 +97,9 @@ class TextProcessor:
         confidence = 0
         line_pages = self.post_process(results)
         pages,low_conf_text = self.to_line(line_pages)
-        for page in pages:
+        for i,page in enumerate(pages):
             page_text += page.get("text","") + "\n"
-            confidence += page.get("confidence",0)
+            confidence += line_pages[i].get("confidence",0)
         
         text,low_conf_text = self._normalize(page_text), self._normalize(low_conf_text)
         return {"text":text,"low_confidence_text":low_conf_text,"confidence":confidence/len(pages)}
