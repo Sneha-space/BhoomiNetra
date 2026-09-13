@@ -40,11 +40,6 @@ async def upload_document(
 
     key = save_bytes(data, kind.extension)
     session = create_session(key)
-    worker = threading.Thread(target=pipeline.process,args=(key,))
-    worker.start()
-    session["thread"] = worker
-
-
     doc = Document(
         original_filename=file.filename,
         storage_key=key,
@@ -54,6 +49,11 @@ async def upload_document(
     db.commit()
     db.refresh(doc)
     session["doc_id"] = doc.id
+
+    worker = threading.Thread(target=pipeline.process, args=(key,))
+    session["thread"] = worker
+    worker.start()
+
     return {
         "document_id": doc.id,
         "original_filename": doc.original_filename,
