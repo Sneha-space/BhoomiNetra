@@ -14,10 +14,8 @@ class CVProcessor:
         self.model = None
         if self.use_enhancement:
             try:
-                # Initialize RealESRGAN with 4x scale factor
                 self.model = RealESRGAN(self.device, scale=4)
                 
-                # Build an absolute path pointing directly to the backend/weights folder
                 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
                 weights_path = os.path.join(BASE_DIR, 'weights', 'RealESRGAN_x4plus.pth')
 
@@ -50,13 +48,10 @@ class CVProcessor:
         return images
 
     def preprocess(self, image: np.ndarray) -> np.ndarray:
-        # Force rotation to correct horizontal/landscape scans into a vertical layout
-        # If it rotates the wrong way, change to cv2.ROTATE_90_COUNTERCLOCKWISE
         image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
         
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         
-        # Set explicit vertical dimensions (Width, Height)
         gray = cv2.resize(gray, (720, 1280))
         
         denoised = cv2.fastNlMeansDenoising(
@@ -66,21 +61,18 @@ class CVProcessor:
             templateWindowSize=7,
             searchWindowSize=21
         )
-        return denoised
+        return cv2.cvtColor(denoised,cv2.COLOR_GRAY2RGB)
 
     def enhance(self, image: np.ndarray) -> np.ndarray:
         try:
-            # Convert OpenCV numpy array to PIL Image format expected by py-real-esrgan
             if len(image.shape) == 2:
                 pil_img = Image.fromarray(image).convert('RGB')
             else:
-                pil_img = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+                pil_img = Image.fromarray(image)
                 
-            # Run AI super-resolution inference
             output_image = self.model.predict(pil_img)
             
-            # Convert PIL image back to OpenCV grayscale format
-            output_cv = cv2.cvtColor(np.array(output_image), cv2.COLOR_RGB2GRAY)
+            output_cv = np.array(output_image), cv2.COLOR_RGB2GRAY
             return output_cv
             
         except Exception as e:
