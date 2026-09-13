@@ -1,3 +1,4 @@
+import json
 import regex as re
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from .prompt import EXTRACTOR_MODEL_PROMPT
@@ -66,11 +67,12 @@ class LLMTextExtractor:
 class RegexTextExtractor:
     def __init__(self):
         self.field_patterns = {}
+        self.generate_patterns()
         self.total_area_pat = re.compile(r"Land\s*Area\s*Dec\.?\s*[:\-]*\s*(?P<value>[\d.]+)", re.IGNORECASE)
         self.plot_row_pat = re.compile(
             r"^(?P<plot_no>\d+)\t"
             r"(?P<land_class>[A-Za-z]+)\t"
-            r"(?P<remarks>From\s*Kh\.?No\.?-?\s*[\d,\s]+)\t"
+            r"(?P<remarks>From\s*Kh\.?\s*No\.?-?\s*[\d,\s]+)\t"
             r"(?P<total_plot_area>[\d.]+)\t"
             r"(?P<occupier_share>[\d.]+)\t"
             r"(?P<share_area>[\d.]+)",
@@ -85,18 +87,85 @@ class RegexTextExtractor:
         self.district_pat = re.compile(r"(?im)^\s*District\s*[:\-]?\s*(.+?)\s*^\t&")
     def process(self,text:str):
         rows = self.load_rows(text)
-        return self.extract_header_fields(rows)
-    def extract_specialized(self,text):
+        header = self.extract_header_fields(rows)
+        special = self.extract_specialized(text,rows)
+        schema = self.build_schema(header, special)
+        return schema
+    def tidy_ocr_spacing(self,value):
+        if not value:
+            return value
+        return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", value)
+    def build_schema(self,header, special):
+        fees = header.get("fees_received")
+        if fees:
+            fees = re.split(r"Copy\s*No", fees, flags=re.IGNORECASE)[0].strip().rstrip(",")
+    
+        return {
+            "landowner_details": {
+                "name": self.tidy_ocr_spacing(header.get("landowner_name")),
+                "guardian": header.get("guardian_name"),
+                "address": header.get("landowner_address"),
+            },
+            "survey_number": header.get("survey_number"),          
+            "khasra_number": [p["plot_no"] for p in special["plot_wise_details"]], 
+            "khata_number": header.get("khata_number"),           
+            "plot_area": {
+                "total_holding_area_dec": special["total_land_area_dec"],
+                "per_plot": [
+                    {
+                        "plot_no": p["plot_no"],
+                        "total_plot_area": p["total_plot_area"],
+                        "occupier_share": p["occupier_share"],
+                        "share_area": p["share_area"],
+                    }
+                    for p in special["plot_wise_details"]
+                ],
+            },
+            "village": header.get("village"),                       
+            "tehsil": header.get("tehsil"),                          
+            "district": header.get("district"),
+            "land_classification": [p["land_class"] for p in special["plot_wise_details"]],
+            "ownership_details": {
+                "tenure_type": special["ownership_type"],
+                "total_plots": header.get("total_plots"),
+            },
+            "mutation_records": special["mutation_records"],         
+            "registration_information": {
+                "statement": special["registration_statement"],
+                "copy_no": special["copy_no"],
+                "certification_date": special["certification_date"],
+                "signed_by": header.get("signed_by"),
+                "fees_received": fees,
+            },
+        }
+
+    def extract_specialized(self,text,rows):
         out = {}
         m = self.total_area_pat.search(text)
         out["total_land_area_dec"] = m.group("value") if m else None
-        out["ownership_type"] = None
         m = self.ownership_type_pat.search(text)
-        out["ownership_type"] = m.group(1)
+        out["ownership_type"] = m.group(1) if m else None
         m = self.registration_pat.search(text)
         out["registration_statement"] = re.sub(r"\s+", " ", m.group(0)).strip() if m else None
         m = self.copy_no_pat.search(text)
         out["copy_no"] = m.group("value") if m else None
+        m = self.cert_date_pat.search(text)
+        out["certification_date"] = m.group("value") if m else None
+        m = self.ref_code_pat.search(text)
+        out["reference_code"] = m.group("value") if m else None
+        out["mutation_records"] = None if not self.mutation_pat.search(text) else "found"
+        out["plot_wise_details"] = self.extract_plot_rows(rows)
+        return out
+    def extract_plot_rows(self,rows):
+        plots = []
+        for row in rows:
+            line = "\t".join(row)
+            m = self.plot_row_pat.match(line)
+            if m:
+                d = m.groupdict()
+                d["remarks"] = re.sub(r"\s+", " ", d["remarks"]).strip()
+                plots.append(d)
+        return plots
 
     def label_regex(self,label):
         escaped = re.escape(label)
