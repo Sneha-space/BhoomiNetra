@@ -1,7 +1,7 @@
 from src.ml.image_enhancer import CVProcessor
 from src.services.pdf_to_img import extract_images_from_pdf
-from src.ml.text_ext_ocr import PaddleOCRProcessor,TextProcessor
-from src.ml.field_extractor import LLMTextExtractor,RegexTextExtractor
+from src.ml.image_processor import PaddleOCRProcessor,TextProcessor
+from src.ml.text_processor import LLMTextExtractor,RegexTextExtractor
 import time
 import cv2
 import json
