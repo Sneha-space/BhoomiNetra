@@ -1,4 +1,5 @@
 """Document routes: upload and (later) retrieval."""
+import threading
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, Depends
 from sqlalchemy.orm import Session
@@ -11,9 +12,10 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from src.core.config import ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES
 from src.services.storage import save_bytes
-
+from src.core.session_maker import create_session
+from src.ml.pipeline import MlPipeline
 router = APIRouter(prefix="/documents", tags=["documents"])
-
+pipeline = MlPipeline()
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -37,6 +39,11 @@ async def upload_document(
         raise HTTPException(status_code=415, detail="Only PDF, JPG, PNG allowed")
 
     key = save_bytes(data, kind.extension)
+    session = create_session(key)
+    worker = threading.Thread(target=pipeline.process,args=(key,))
+    worker.start()
+    session["thread"] = worker
+
 
     doc = Document(
         original_filename=file.filename,
@@ -46,7 +53,7 @@ async def upload_document(
     db.add(doc)
     db.commit()
     db.refresh(doc)
-
+    session["doc_id"] = doc.id
     return {
         "document_id": doc.id,
         "original_filename": doc.original_filename,
